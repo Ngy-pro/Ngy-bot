@@ -7,6 +7,7 @@ from pydub import AudioSegment
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
+# --- ENVIROMENT SETUP ---
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 OPENROUTER_KEY = os.environ["OPENROUTER_KEY"]
 
@@ -31,8 +32,8 @@ user_chat_histories = {}
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-def call_openrouter_api(user_id, content_payload):
-    # Updated to Groq's chat completion endpoint
+# --- CORE API ENGINE ---
+def call_openrouter_api(user_id, content_payload, model_name="llama-3.3-70b-versatile"):
     url = 'https://api.groq.com/openai/v1/chat/completions'
     headers = {
         'Authorization': f'Bearer {OPENROUTER_KEY}',
@@ -42,11 +43,11 @@ def call_openrouter_api(user_id, content_payload):
     if user_id not in user_chat_histories:
         user_chat_histories[user_id] = []
 
+    # Injecting the master chat template
     payload_messages = [{'role': 'system', 'content': BOT_PERSONALITY}] + user_chat_histories[user_id] + [{'role': 'user', 'content': content_payload}]
 
     data = {
-        # Updated to Groq's current high-performing free model
-        'model': 'llama-3.3-70b-versatile',
+        'model': model_name,
         'max_tokens': 150,
         'messages': payload_messages
     }
@@ -60,6 +61,7 @@ def call_openrouter_api(user_id, content_payload):
 
     ai_reply = response_json['choices'][0]['message']['content']
 
+    # Keep memory summary light to save space
     summary = content_payload if isinstance(content_payload, str) else "[Sent Media]"
     user_chat_histories[user_id].append({'role': 'user', 'content': summary})
     user_chat_histories[user_id].append({'role': 'assistant', 'content': ai_reply})
@@ -69,19 +71,22 @@ def call_openrouter_api(user_id, content_payload):
 
     return ai_reply
 
+# --- GROUP FILTERS ---
 def is_group(update: Update) -> bool:
     return update.effective_chat.type in ("group", "supergroup")
 
 def triggered_in_group(text: str) -> bool:
     return "ngy" in text.lower()
 
+# --- HANDLERS ---
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_text = update.message.text
     if is_group(update) and not triggered_in_group(user_text):
         return
     try:
-        ai_reply = call_openrouter_api(user_id, user_text)
+        # Worker 1: Pure Text Processing
+        ai_reply = call_openrouter_api(user_id, user_text, model_name="llama-3.3-70b-versatile")
         await update.message.reply_text(ai_reply)
     except Exception as e:
         await update.message.reply_text("idk bro 😭 text broke")
@@ -92,6 +97,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = update.message.caption if update.message.caption else "Analyze this picture."
     if is_group(update) and not triggered_in_group(caption):
         return
+    
+    loading_msg = await update.message.reply_text("hold up, checking this photo... 👀")
     try:
         photo_file = await update.message.photo[-1].get_file()
         photo_bytes = await photo_file.download_as_bytearray()
@@ -101,21 +108,20 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             {'type': 'text', 'text': caption},
             {'type': 'image_url', 'image_url': {'url': f"data:image/jpeg;base64,{base64_image}"}}
         ]
-        ai_reply = call_openrouter_api(user_id, content_payload)
-        await update.message.reply_text(ai_reply)
+        # Worker 2: Switches seamlessly to the vision engine
+        ai_reply = call_openrouter_api(user_id, content_payload, model_name="meta-llama/llama-4-scout-17b-16e-instruct")
+        await loading_msg.edit_text(ai_reply)
     except Exception as e:
-        await update.message.reply_text("idk bro 😭 image broke")
+        await loading_msg.edit_text("idk bro 😭 image broke")
         print(f"Error: {e}")
 
 def transcribe_audio(wav_filename):
-    # Updated to Groq's audio transcription endpoint
     url = 'https://api.groq.com/openai/v1/audio/transcriptions'
     headers = {
         'Authorization': f'Bearer {OPENROUTER_KEY}',
     }
     with open(wav_filename, "rb") as f:
         files = {'file': (wav_filename, f, 'audio/wav')}
-        # Updated to Groq's native Whisper model
         data = {'model': 'whisper-large-v3'}
         response = requests.post(url, headers=headers, files=files, data=data)
     result = response.json()
@@ -141,7 +147,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         transcribed_text = transcribe_audio(wav_filename)
         print(f"Transcribed: {transcribed_text}")
 
-        ai_reply = call_openrouter_api(user_id, f"[Voice message]: {transcribed_text}")
+        ai_reply = call_openrouter_api(user_id, f"[Voice message]: {transcribed_text}", model_name="llama-3.3-70b-versatile")
         await update.message.reply_text(ai_reply)
 
     except Exception as e:
@@ -157,6 +163,8 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = update.message.caption if update.message.caption else "Watch this video."
     if is_group(update) and not triggered_in_group(caption):
         return
+    
+    loading_msg = await update.message.reply_text("processing this video clip... 🎬")
     try:
         video_file = await update.message.video.get_file()
         video_bytes = await video_file.download_as_bytearray()
@@ -166,12 +174,14 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             {'type': 'text', 'text': caption},
             {'type': 'image_url', 'image_url': {'url': f"data:video/mp4;base64,{base64_video}"}}
         ]
-        ai_reply = call_openrouter_api(user_id, content_payload)
-        await update.message.reply_text(ai_reply)
+        # Worker 2: Same vision engine optimized for video arrays
+        ai_reply = call_openrouter_api(user_id, content_payload, model_name="meta-llama/llama-4-scout-17b-16e-instruct")
+        await loading_msg.edit_text(ai_reply)
     except Exception as e:
-        await update.message.reply_text("idk bro 😭 video broke")
+        await loading_msg.edit_text("idk bro 😭 video broke")
         print(f"Error: {e}")
 
+# --- START UP ---
 if __name__ == '__main__':
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
@@ -182,4 +192,4 @@ if __name__ == '__main__':
 
     print("Bot is active... Monitoring streams.")
     app.run_polling()
-        
+    
