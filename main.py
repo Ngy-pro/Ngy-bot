@@ -7,7 +7,7 @@ from pydub import AudioSegment
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
 
-# --- ENVIROMENT SETUP ---
+# --- ENVIRONMENT SETUP ---
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 OPENROUTER_KEY = os.environ["OPENROUTER_KEY"]
 
@@ -43,7 +43,6 @@ def call_openrouter_api(user_id, content_payload, model_name="llama-3.3-70b-vers
     if user_id not in user_chat_histories:
         user_chat_histories[user_id] = []
 
-    # Injecting the master chat template
     payload_messages = [{'role': 'system', 'content': BOT_PERSONALITY}] + user_chat_histories[user_id] + [{'role': 'user', 'content': content_payload}]
 
     data = {
@@ -61,7 +60,6 @@ def call_openrouter_api(user_id, content_payload, model_name="llama-3.3-70b-vers
 
     ai_reply = response_json['choices'][0]['message']['content']
 
-    # Keep memory summary light to save space
     summary = content_payload if isinstance(content_payload, str) else "[Sent Media]"
     user_chat_histories[user_id].append({'role': 'user', 'content': summary})
     user_chat_histories[user_id].append({'role': 'assistant', 'content': ai_reply})
@@ -85,7 +83,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_group(update) and not triggered_in_group(user_text):
         return
     try:
-        # Worker 1: Pure Text Processing
         ai_reply = call_openrouter_api(user_id, user_text, model_name="llama-3.3-70b-versatile")
         await update.message.reply_text(ai_reply)
     except Exception as e:
@@ -108,7 +105,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             {'type': 'text', 'text': caption},
             {'type': 'image_url', 'image_url': {'url': f"data:image/jpeg;base64,{base64_image}"}}
         ]
-        # Worker 2: Switches seamlessly to the vision engine
         ai_reply = call_openrouter_api(user_id, content_payload, model_name="meta-llama/llama-4-scout-17b-16e-instruct")
         await loading_msg.edit_text(ai_reply)
     except Exception as e:
@@ -134,27 +130,35 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if is_group(update):
         return
+        
+    # Corrected filenames to match native Telegram .ogg layout format
     ogg_filename = f"voice_{user_id}.ogg"
     wav_filename = f"voice_{user_id}.wav"
 
+    loading_msg = await update.message.reply_text("listening to this real quick... 🎧")
+
     try:
+        # Download native Telegram file stream (.ogg format)
         voice_file = await update.message.voice.get_file()
         await voice_file.download_to_drive(ogg_filename)
 
+        # Convert to PCM Wav container format for Groq Whisper pipeline optimization
         audio = AudioSegment.from_file(ogg_filename, format="ogg")
         audio.export(wav_filename, format="wav")
 
         transcribed_text = transcribe_audio(wav_filename)
-        print(f"Transcribed: {transcribed_text}")
+        print(f"Transcribed text outcome: {transcribed_text}")
 
+        # Complete final payload forwarding sequence
         ai_reply = call_openrouter_api(user_id, f"[Voice message]: {transcribed_text}", model_name="llama-3.3-70b-versatile")
-        await update.message.reply_text(ai_reply)
+        await loading_msg.edit_text(ai_reply)
 
     except Exception as e:
-        await update.message.reply_text("idk bro 😭 voice broke")
+        await loading_msg.edit_text("idk bro 😭 voice broke")
         print(f"Error: {e}")
 
     finally:
+        # Clean workspace paths instantly
         if os.path.exists(ogg_filename): os.remove(ogg_filename)
         if os.path.exists(wav_filename): os.remove(wav_filename)
 
@@ -174,7 +178,6 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             {'type': 'text', 'text': caption},
             {'type': 'image_url', 'image_url': {'url': f"data:video/mp4;base64,{base64_video}"}}
         ]
-        # Worker 2: Same vision engine optimized for video arrays
         ai_reply = call_openrouter_api(user_id, content_payload, model_name="meta-llama/llama-4-scout-17b-16e-instruct")
         await loading_msg.edit_text(ai_reply)
     except Exception as e:
