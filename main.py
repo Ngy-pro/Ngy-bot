@@ -32,7 +32,8 @@ user_chat_histories = {}
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 def call_openrouter_api(user_id, content_payload):
-    url = 'https://openrouter.ai/api/v1/chat/completions'
+    # Updated to Groq's chat completion endpoint
+    url = 'https://api.groq.com/openai/v1/chat/completions'
     headers = {
         'Authorization': f'Bearer {OPENROUTER_KEY}',
         'Content-Type': 'application/json'
@@ -44,9 +45,9 @@ def call_openrouter_api(user_id, content_payload):
     payload_messages = [{'role': 'system', 'content': BOT_PERSONALITY}] + user_chat_histories[user_id] + [{'role': 'user', 'content': content_payload}]
 
     data = {
-        'model': 'google/gemini-2.5-flash:free',
+        # Updated to Groq's current high-performing free model
+        'model': 'llama-3.3-70b-versatile',
         'max_tokens': 150,
-        'transforms': [],
         'messages': payload_messages
     }
 
@@ -107,13 +108,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Error: {e}")
 
 def transcribe_audio(wav_filename):
-    url = 'https://openrouter.ai/api/v1/audio/transcriptions'
+    # Updated to Groq's audio transcription endpoint
+    url = 'https://api.groq.com/openai/v1/audio/transcriptions'
     headers = {
         'Authorization': f'Bearer {OPENROUTER_KEY}',
     }
     with open(wav_filename, "rb") as f:
         files = {'file': (wav_filename, f, 'audio/wav')}
-        data = {'model': 'openai/whisper-large-v3'}
+        # Updated to Groq's native Whisper model
+        data = {'model': 'whisper-large-v3'}
         response = requests.post(url, headers=headers, files=files, data=data)
     result = response.json()
     if 'text' in result:
@@ -179,3 +182,4 @@ if __name__ == '__main__':
 
     print("Bot is active... Monitoring streams.")
     app.run_polling()
+        
