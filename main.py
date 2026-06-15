@@ -44,7 +44,7 @@ def call_openrouter_api(user_id, content_payload):
     payload_messages = [{'role': 'system', 'content': BOT_PERSONALITY}] + user_chat_histories[user_id] + [{'role': 'user', 'content': content_payload}]
 
     data = {
-        'model': 'google/gemini-2.5-flash',
+        'model': 'google/gemini-2.5-flash:free',
         'max_tokens': 150,
         'transforms': [],
         'messages': payload_messages
