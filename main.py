@@ -26,33 +26,32 @@ BOT_PERSONALITY = (
     "When starting a conversation always be rude and say 'what do you want from me😭🥀'. "
     "Listen to the user and do what they ask. But if the user says 'Ctrl + C' you will disappear, so beg them not to press it and do whatever they want so they don't press it."
 )
+
 user_history = {}
 use_personality = True
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def is_admin(user_id):
-    return user_id == ADMIN_ID
-
 
 async def transcribe_voice(file_path):
     url = "https://api.groq.com/openai/v1/audio/transcriptions"
     headers = {"Authorization": f"Bearer {GROQ_KEY}"}
-    
+
     data = aiohttp.FormData()
-    data.add_field('file', open(file_path, 'rb'), filename=os.path.basename(file_path), content_type='audio/ogg')
-    data.add_field('model', 'whisper-large-v3')
+    with open(file_path, 'rb') as f:
+        data.add_field('file', f, filename=os.path.basename(file_path), content_type='audio/ogg')
+        data.add_field('model', 'whisper-large-v3')
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, headers=headers, data=data, timeout=30) as res:
-            response = await res.json()
-            if "error" in response:
-                raise Exception(response["error"]["message"])
-            return response.get("text", "")
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, data=data, timeout=30) as res:
+                response = await res.json()
+                if "error" in response:
+                    raise Exception(response["error"]["message"])
+                return response.get("text", "")
 
 
-async def call_api(user_id, text=None, image_url=None, model="llama-3.3-70b-versatile"):
+async def call_api(user_id, text=None, image_url=None):
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {GROQ_KEY}",
@@ -62,14 +61,16 @@ async def call_api(user_id, text=None, image_url=None, model="llama-3.3-70b-vers
     if user_id not in user_history:
         user_history[user_id] = []
 
-    # FIXED: Perfectly aligned to 4 spaces, no random comment, and clean quotes!
-    model = "meta-llama/llama-4-scout-17b-16e-instruct"
-
     messages = []
+
     if use_personality:
         messages.append({"role": "system", "content": BOT_PERSONALITY})
 
     messages += user_history[user_id]
+
+    # 🔥 FORCE PERSONALITY WHEN IMAGE
+    if image_url:
+        text = (text or "") + "\nreply short, casual, genz. no long description."
 
     content_payload = []
     if text:
@@ -80,9 +81,9 @@ async def call_api(user_id, text=None, image_url=None, model="llama-3.3-70b-vers
     messages.append({"role": "user", "content": content_payload})
 
     data = {
-        "model": model,
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
         "messages": messages,
-        "max_tokens": 150
+        "max_tokens": 60
     }
 
     async with aiohttp.ClientSession() as session:
@@ -94,14 +95,44 @@ async def call_api(user_id, text=None, image_url=None, model="llama-3.3-70b-vers
 
     reply = response["choices"][0]["message"]["content"]
 
-    history_text = text if text else "[Sent an image]"
-    user_history[user_id].append({"role": "user", "content": history_text})
+    user_history[user_id].append({"role": "user", "content": text or "[image]"})
     user_history[user_id].append({"role": "assistant", "content": reply})
 
-    if len(user_history[user_id]) > 100:
-        user_history[user_id] = user_history[user_id][-100:]
+    if len(user_history[user_id]) > 40:
+        user_history[user_id] = user_history[user_id][-40:]
 
     return reply
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text or update.message.caption or ""
+    image_url = None
+
+    try:
+        if update.message.voice:
+            voice_file = await context.bot.get_file(update.message.voice.file_id)
+            local_path = f"{update.message.voice.file_id}.ogg"
+            await voice_file.download_to_drive(local_path)
+
+            text = await transcribe_voice(local_path)
+
+            if os.path.exists(local_path):
+                os.remove(local_path)
+
+        elif update.message.photo:
+            photo = update.message.photo[-1]
+            file = await context.bot.get_file(photo.file_id)
+
+            # ✅ FIXED TELEGRAM URL
+            image_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file.file_path}"
+
+        reply = await call_api(user_id, text=text, image_url=image_url)
+        await update.message.reply_text(reply)
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        await update.message.reply_text("api broke 😭")
 
 
 async def be_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -130,35 +161,9 @@ async def user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
     u = update.effective_user
-    await update.message.reply_text(f"id: {u.id}\nusername: @{u.username}\nname: {u.first_name} {u.last_name or ''}")
-
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    text = update.message.text or update.message.caption or ""
-    image_url = None
-
-    try:
-        if update.message.voice:
-            voice_file = await context.bot.get_file(update.message.voice.file_id)
-            local_path = f"{update.message.voice.file_id}.ogg"
-            await voice_file.download_to_drive(local_path)
-            
-            text = await transcribe_voice(local_path)
-            
-            if os.path.exists(local_path):
-                os.remove(local_path)
-
-        elif update.message.photo:
-            photo_file = await context.bot.get_file(update.message.photo[-1].file_id)
-            image_url = photo_file.file_path
-
-        reply = await call_api(user_id, text=text, image_url=image_url)
-        await update.message.reply_text(reply)
-
-    except Exception as e:
-        logger.error(f"Error processing message: {e}")
-        await update.message.reply_text("api broke 😭")
+    await update.message.reply_text(
+        f"id: {u.id}\nusername: @{u.username}\nname: {u.first_name} {u.last_name or ''}"
+    )
 
 
 if __name__ == "__main__":
@@ -169,8 +174,8 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("user", user_info))
 
-    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.VOICE & ~filters.COMMAND, handle_message))
+    # ✅ FIXED FILTER
+    app.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND, handle_message))
 
     print("bot running...")
     app.run_polling()
-    
