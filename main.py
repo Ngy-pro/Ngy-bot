@@ -62,8 +62,8 @@ async def call_api(user_id, text=None, image_url=None, model="llama-3.3-70b-vers
     if user_id not in user_history:
         user_history[user_id] = []
 
-     model = "meta-llama/llama-4-scout-17b-16e-instruct"  # <-- Added 4 spaces at the front and a " at the end
-    
+    # FIXED: Perfectly aligned to 4 spaces, no random comment, and clean quotes!
+    model = "meta-llama/llama-4-scout-17b-16e-instruct"
 
     messages = []
     if use_personality:
@@ -104,8 +104,6 @@ async def call_api(user_id, text=None, image_url=None, model="llama-3.3-70b-vers
     return reply
 
 
-
-
 async def be_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global use_personality
     if update.effective_user.id != ADMIN_ID:
@@ -135,8 +133,6 @@ async def user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"id: {u.id}\nusername: @{u.username}\nname: {u.first_name} {u.last_name or ''}")
 
 
-
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text or update.message.caption or ""
@@ -163,8 +159,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error processing message: {e}")
         await update.message.reply_text("api broke 😭")
-
-
 
 
 if __name__ == "__main__":
