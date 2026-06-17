@@ -63,7 +63,8 @@ async def call_api(user_id, text=None, image_url=None, model="llama-3.3-70b-vers
         user_history[user_id] = []
 
     if image_url:
-        model = "llama-3.2-11b-vision-preview"
+    model = "meta-llama/llama-4-scout-17b-16e-instruct"
+    
 
     messages = []
     if use_personality:
