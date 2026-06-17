@@ -143,9 +143,7 @@ async def call_api(user_id, text=None, image_base64=None):
     return "api dead 💀"
 
 
-# =========================
-# ✅ ADDED: track users
-# =========================
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
@@ -190,9 +188,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("api broke 😭")
 
 
-# =========================
-# ✅ ADDED: /users command
-# =========================
+
 async def users_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
@@ -247,7 +243,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("user", user_info))
 
-    # ✅ ADDED
+    
     app.add_handler(CommandHandler("users", users_list))
 
     app.add_handler(
@@ -257,3 +253,5 @@ if __name__ == "__main__":
 
     print("bot running...")
     app.run_polling()
+
+#made by dydydydydydy, ngy_pro
