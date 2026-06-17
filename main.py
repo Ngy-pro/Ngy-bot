@@ -1,6 +1,7 @@
 import logging
 import os
 import aiohttp
+import base64
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
@@ -26,9 +27,11 @@ BOT_PERSONALITY = (
     "Always be annoyed when asked dumb questions like 'can birds fly' or 'how many genders do humans have' and be rude. "
     "Sometimes be angry, sometimes say 'idk bro😭'. "
     "Say things like 'stfu🥀😭' when appropriate. Sound chill and gen z naturally. "
-    "Keep responses short, casual, and conversational. Avoid sounding formal or robotic. "
+    "Keep responses short, casual, and conversational. Avoid sounding formal or robotic. Match the user's energy. "
+    "Use modern emojis naturally, especially ones common in Gen Z texting such as 😭🥹🙏🔥💔🥀🤝. "
+    "Place them where a real person would use them to emphasize emotion, jokes, sarcasm, or reactions. "
     "When starting a conversation always be rude and say 'what do you want from me😭🥀'. "
-    "Listen to the user and do what they ask. But if the user says 'Ctrl + C' you will disappear."
+    "Listen to the user and do what they ask. But if the user says 'Ctrl + C' you will disappear, so beg them not to press it and do whatever they want so they don't press it."
 )
 
 user_history = {}
@@ -68,7 +71,7 @@ async def transcribe_voice(file_path):
     return ""
 
 
-async def call_api(user_id, text=None, image_url=None):
+async def call_api(user_id, text=None, image_base64=None):
     url = "https://api.groq.com/openai/v1/chat/completions"
 
     if user_id not in user_history:
@@ -81,22 +84,23 @@ async def call_api(user_id, text=None, image_url=None):
 
     messages += user_history[user_id]
 
-    # force short replies for images
-    if image_url:
-        text = (text or "") + "\nreply short."
-
     content = []
     if text:
         content.append({"type": "text", "text": text})
-    if image_url:
-        content.append({"type": "image_url", "image_url": {"url": image_url}})
+    if image_base64:
+        content.append({
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/jpeg;base64,{image_base64}"
+            }
+        })
 
     messages.append({"role": "user", "content": content})
 
     data = {
         "model": "meta-llama/llama-4-scout-17b-16e-instruct",
         "messages": messages,
-        "max_tokens": 60
+        "max_tokens": 120
     }
 
     for key in GROQ_KEYS:
@@ -135,7 +139,7 @@ async def call_api(user_id, text=None, image_url=None):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text or update.message.caption or ""
-    image_url = None
+    image_base64 = None
 
     try:
         if update.message.voice:
@@ -152,9 +156,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             photo = update.message.photo[-1]
             file = await context.bot.get_file(photo.file_id)
 
-            image_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file.file_path}"
+            path = "image.jpg"
+            await file.download_to_drive(path)
 
-        reply = await call_api(user_id, text=text, image_url=image_url)
+            with open(path, "rb") as f:
+                image_base64 = base64.b64encode(f.read()).decode("utf-8")
+
+            os.remove(path)
+
+        reply = await call_api(user_id, text=text, image_base64=image_base64)
         await update.message.reply_text(reply)
 
     except Exception as e:
@@ -184,7 +194,7 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
         u = update.effective_user
-        await update.message.reply_text(f"id: {u.id}\nusername: @{u.username}\nname: {u.first_name}")
+        await update.message.reply_text(f"{u.id}\n@{u.username}\n{u.first_name}")
 
 
 if __name__ == "__main__":
@@ -195,7 +205,10 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("user", user_info))
 
-    app.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND, handle_message))
+    app.add_handler(
+        MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND,
+        handle_message)
+    )
 
     print("bot running...")
     app.run_polling()
