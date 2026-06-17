@@ -62,8 +62,8 @@ async def call_api(user_id, text=None, image_url=None, model="llama-3.3-70b-vers
     if user_id not in user_history:
         user_history[user_id] = []
 
-    if image_url:
-    model = "meta-llama/llama-4-scout-17b-16e-instruct"
+    if some_condition:
+        model = "meta-llama/llama-4-scout-17b-16e-instruct"  # <-- Added 4 spaces at the front and a " at the end
     
 
     messages = []
