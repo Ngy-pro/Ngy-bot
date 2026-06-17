@@ -9,7 +9,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, Comma
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 
 GROQ_KEYS = [
-    os.environ["GROQ_KEY"],
+    os.environ.get("GROQ_KEY"),
     os.environ.get("GROQ_KEY_2"),
     os.environ.get("GROQ_KEY_3"),
 ]
@@ -37,8 +37,15 @@ BOT_PERSONALITY = (
 user_history = {}
 use_personality = True
 
+# ✅ ADDED: user tracking storage
+known_users = {}
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def is_admin(user_id):
+    return user_id == ADMIN_ID
 
 
 async def transcribe_voice(file_path):
@@ -136,8 +143,19 @@ async def call_api(user_id, text=None, image_base64=None):
     return "api dead 💀"
 
 
+# =========================
+# ✅ ADDED: track users
+# =========================
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    user = update.effective_user
+
+    # track user
+    known_users[user.id] = {
+        "name": user.first_name,
+        "username": user.username
+    }
+
+    user_id = user.id
     text = update.message.text or update.message.caption or ""
     image_base64 = None
 
@@ -172,6 +190,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("api broke 😭")
 
 
+# =========================
+# ✅ ADDED: /users command
+# =========================
+async def users_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    if not known_users:
+        await update.message.reply_text("no users yet 💀")
+        return
+
+    msg = ""
+    for uid, info in known_users.items():
+        name = info.get("name", "unknown")
+        username = info.get("username")
+
+        if username:
+            msg += f"User: {name}\nID: {uid}\n@{username}\n\n"
+        else:
+            msg += f"User: {name}\nID: {uid}\n\n"
+
+    await update.message.reply_text(msg)
+
+
 async def be_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global use_personality
     if update.effective_user.id == ADMIN_ID:
@@ -188,7 +230,7 @@ async def be_normal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id == ADMIN_ID:
-        await update.message.reply_text("menu:\n/be_ai\n/be_normal\n/user")
+        await update.message.reply_text("menu:\n/be_ai\n/be_normal\n/user\n/users")
 
 
 async def user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -204,6 +246,9 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("be_normal", be_normal))
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("user", user_info))
+
+    # ✅ ADDED
+    app.add_handler(CommandHandler("users", users_list))
 
     app.add_handler(
         MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND,
