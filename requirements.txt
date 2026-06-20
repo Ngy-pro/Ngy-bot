@@ -3,3 +3,4 @@ requests
 pydub
 audioop-lts
 aiohttp
+opencv-python-headless
