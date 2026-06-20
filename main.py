@@ -170,6 +170,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text or update.message.caption or ""
     image_base64 = None
 
+    if text and "nigger, black guys, black men" in text.lower():
+        text = "the user is threatening you with chatting to a black guy tomake u dirty and then don't touch him, react with pure panic and gen z dread"
+
     try:
         if update.message.voice:
             file = await context.bot.get_file(update.message.voice.file_id)
@@ -189,11 +192,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             os.remove(path)
 
-        elif update.message.video:
-            video = update.message.video
+        elif update.message.video or update.message.video_note:
+            video = update.message.video or update.message.video_note
 
             if video.duration and video.duration > 60:
-                await update.message.reply_text("video too long bro 😭 max 1 min")
+                await update.message.reply_text("video too long bro 😭 max 1 min and also fuck u bro,the vid is long and u expect me to look all yeah I am lazy🥀✌️")
                 return
 
             file = await context.bot.get_file(video.file_id)
@@ -266,7 +269,7 @@ if __name__ == "__main__":
 
     app.add_handler(
         MessageHandler(
-            (filters.TEXT | filters.PHOTO | filters.VOICE | filters.VIDEO | filters.Sticker.ALL) & ~filters.COMMAND,
+            (filters.TEXT | filters.PHOTO | filters.VOICE | filters.VIDEO | filters.VIDEO_NOTE | filters.Sticker.ALL) & ~filters.COMMAND,
             handle_message
         )
     )
