@@ -200,6 +200,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             sticker = update.message.sticker
             file = await context.bot.get_file(sticker.file_id)
 
+            text = text or "analyze this sticker and describe it"
+
             if not sticker.is_animated:
                 path = "sticker.webp"
                 await file.download_to_drive(path)
@@ -208,9 +210,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     image_base64 = base64.b64encode(f.read()).decode("utf-8")
 
                 os.remove(path)
-                text = text or "describe this sticker"
             else:
-                text = text or "react to this animated sticker"
+                text = text + " (animated sticker)"
 
         reply = await call_api(user_id, text=text, image_base64=image_base64)
         await update.message.reply_text(reply)
@@ -273,7 +274,6 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("be_normal", be_normal))
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("user", user_info))
-
     app.add_handler(CommandHandler("users", users_list))
 
     app.add_handler(
