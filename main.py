@@ -277,7 +277,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("users", users_list))
 
     app.add_handler(
-        MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND,
+        MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE | filters.Sticker.ALL) & ~filters.COMMAND,
         handle_message)
     )
 
