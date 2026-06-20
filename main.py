@@ -37,7 +37,6 @@ BOT_PERSONALITY = (
 user_history = {}
 use_personality = True
 
-# ✅ ADDED: user tracking storage
 known_users = {}
 
 logging.basicConfig(level=logging.INFO)
@@ -147,7 +146,6 @@ async def call_api(user_id, text=None, image_base64=None):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
-    # track user
     known_users[user.id] = {
         "name": user.first_name,
         "username": user.username
@@ -180,13 +178,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             os.remove(path)
 
+        elif update.message.sticker:
+            sticker = update.message.sticker
+            file = await context.bot.get_file(sticker.file_id)
+
+            if not sticker.is_animated:
+                path = "sticker.webp"
+                await file.download_to_drive(path)
+
+                with open(path, "rb") as f:
+                    image_base64 = base64.b64encode(f.read()).decode("utf-8")
+
+                os.remove(path)
+                text = text or "describe this sticker"
+            else:
+                text = text or "react to this animated sticker"
+
         reply = await call_api(user_id, text=text, image_base64=image_base64)
         await update.message.reply_text(reply)
 
     except Exception as e:
         logger.error(e)
         await update.message.reply_text("api broke 😭")
-
 
 
 async def users_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -243,15 +256,12 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("menu", menu))
     app.add_handler(CommandHandler("user", user_info))
 
-    
     app.add_handler(CommandHandler("users", users_list))
 
     app.add_handler(
-        MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND,
+        MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE | filters.STICKER) & ~filters.COMMAND,
         handle_message)
     )
 
     print("bot running...")
     app.run_polling()
-
-#made by dydydydydydy, ngy_pro
