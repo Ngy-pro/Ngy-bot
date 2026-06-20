@@ -3,6 +3,8 @@ import os
 import aiohttp
 import base64
 import json
+import time
+from collections import defaultdict, deque
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
@@ -51,6 +53,8 @@ if os.path.exists(USERS_FILE):
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+user_spam = defaultdict(lambda: deque(maxlen=10))
+
 
 def save_users():
     try:
@@ -58,6 +62,15 @@ def save_users():
             json.dump(known_users, f)
     except Exception:
         pass
+
+
+def is_spamming(user_id):
+    now = time.time()
+    user_spam[user_id].append(now)
+
+    recent = [t for t in user_spam[user_id] if now - t <= 2]
+
+    return len(recent) >= 5
 
 
 def is_admin(user_id):
@@ -151,6 +164,11 @@ async def call_api(user_id, text=None, image_base64=None):
             if len(user_history[user_id]) > 80:
                 user_history[user_id] = user_history[user_id][-80:]
 
+            if reply:
+                reply = reply.strip()
+                if len(reply) > 220:
+                    reply = reply[:220] + "..."
+
             return reply
 
         except Exception:
@@ -161,6 +179,10 @@ async def call_api(user_id, text=None, image_base64=None):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+
+    if is_spamming(user.id):
+        await update.message.reply_text("bro chill 🥀😭")
+        return
 
     known_users[user.id] = {
         "name": user.first_name,
@@ -195,6 +217,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 image_base64 = base64.b64encode(f.read()).decode("utf-8")
 
             os.remove(path)
+
+        elif update.message.video:
+            video = update.message.video
+
+            if video.duration and video.duration > 60:
+                await update.message.reply_text("video too long bro 😭 max 1 min")
+                return
+
+            file = await context.bot.get_file(video.file_id)
+
+            path = "video.mp4"
+            await file.download_to_drive(path)
+
+            text = "analyze this video briefly"
 
         elif update.message.sticker:
             sticker = update.message.sticker
@@ -277,7 +313,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("users", users_list))
 
     app.add_handler(
-        MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE | filters.Sticker.ALL) & ~filters.COMMAND,
+        MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE | filters.VIDEO | filters.Sticker.ALL) & ~filters.COMMAND,
         handle_message)
     )
 
