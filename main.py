@@ -175,6 +175,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file = await context.bot.get_file(update.message.voice.file_id)
             path = "voice.ogg"
             await file.download_to_drive(path)
+            os.remove(path)
+            text = "user sent a voice message, react to it sarcastically"
 
         elif update.message.photo:
             photo = update.message.photo[-1]
