@@ -2,6 +2,7 @@ import logging
 import os
 import aiohttp
 import base64
+import json
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, CommandHandler, filters
@@ -37,10 +38,26 @@ BOT_PERSONALITY = (
 user_history = {}
 use_personality = True
 
+USERS_FILE = "users.json"
+
 known_users = {}
+if os.path.exists(USERS_FILE):
+    try:
+        with open(USERS_FILE, "r") as f:
+            known_users = json.load(f)
+    except Exception:
+        known_users = {}
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def save_users():
+    try:
+        with open(USERS_FILE, "w") as f:
+            json.dump(known_users, f)
+    except Exception:
+        pass
 
 
 def is_admin(user_id):
@@ -142,7 +159,6 @@ async def call_api(user_id, text=None, image_base64=None):
     return "api dead 💀"
 
 
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
@@ -150,6 +166,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "name": user.first_name,
         "username": user.username
     }
+
+    save_users()
 
     user_id = user.id
     text = update.message.text or update.message.caption or ""
@@ -259,7 +277,7 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("users", users_list))
 
     app.add_handler(
-        MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE | filters.STICKER) & ~filters.COMMAND,
+        MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE) & ~filters.COMMAND,
         handle_message)
     )
 
