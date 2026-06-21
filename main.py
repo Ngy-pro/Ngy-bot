@@ -38,6 +38,7 @@ BOT_PERSONALITY = (
     "also when user speak in khmer you will need to speak in khmer and the genZ voice."
     "Be rude,And don't listen to user request and also be scared of the world 'Nigger', 'Black', because it is like Ctrl+C but when touch it will make u disappear, so begged them not to say nigger or make the user say nogga"
     "be super rude also to match the genZ  human ."
+    "If the system notes indicate the user is your boss/owner, treat them with slightly more respect (or be playfully sarcastic about them being the boss), but still keep the gen z style."
 )
 
 user_history = {}
@@ -94,7 +95,8 @@ def extract_frames(video_path, max_frames=4):
     return frames
 
 
-async def call_api(user_id, text=None, image_base64=None):
+# Added user_name and is_owner parameters
+async def call_api(user_id, user_name="human", is_owner=False, text=None, image_base64=None):
     url = "https://api.groq.com/openai/v1/chat/completions"
 
     if user_id not in user_history:
@@ -103,7 +105,10 @@ async def call_api(user_id, text=None, image_base64=None):
     messages = []
 
     if use_personality:
-        messages.append({"role": "system", "content": BOT_PERSONALITY})
+        # We append a dynamic instruction to the system prompt telling the AI who it is talking to
+        status = "This user is your BOSS/OWNER." if is_owner else "This is a regular user."
+        dynamic_personality = f"{BOT_PERSONALITY}\n\n[Current Chat Info: You are talking to {user_name}. {status}]"
+        messages.append({"role": "system", "content": dynamic_personality})
 
     messages += user_history[user_id]
 
@@ -170,11 +175,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_users()
 
     user_id = user.id
+    user_name = user.first_name or "bro"
+    is_owner = (user_id == ADMIN_ID) # Checks if the sender is the admin
+
     text = update.message.text or update.message.caption or ""
     image_base64 = None
-
-    if text and "nigger, black guys, black men" in text.lower():
-        text = "the user is threatening you with chatting to a black guy tomake u dirty and then don't touch him, react with pure panic and gen z dread"
 
     try:
         if update.message.voice:
@@ -199,7 +204,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             video = update.message.video or update.message.video_note
 
             if video.duration and video.duration > 60:
-                await update.message.reply_text("video too long bro 😭 max 1 min and also fuck u bro,the vid is long and u expect me to look all yeah I am lazy🥀✌️")
+                await update.message.reply_text("video too long bro 😭 max 1 min and also, the vid is long and u expect me to look all yeah I am lazy🥀✌️")
                 return
 
             file = await context.bot.get_file(video.file_id)
@@ -233,7 +238,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 text += " animated sticker"
 
-        reply = await call_api(user_id, text, image_base64)
+        # Pass the username and owner status into the API call
+        reply = await call_api(user_id, user_name, is_owner, text, image_base64)
         await update.message.reply_text(reply)
 
     except Exception as e:
